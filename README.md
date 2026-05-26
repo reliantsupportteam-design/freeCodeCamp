@@ -1,1 +1,114 @@
+‎string public name = "Geegy Token";
+‎public symbol =    // Address is a multisig wallet.
+‎address public founder = 0x0;
+‎
+‎// signer address (for clickwrap agreement)
+‎// see function() {} for comments
+‎address public signer = 0x0;
+‎
+‎uint public etherCap = 500000 * 10**18; //max amount raised during crowdsale (5.5M USD worth of ether will be measured with market price at beginning of the crowdsale)
+‎uint public transferLockup = 370285; //transfers are locked for this many blocks after endBlock (assuming 14 second blocks, this is 2 months)
+‎uint public founderLockup = 2252571; //founder allocation cannot be created until this many blocks after endBlock (assuming 14 second blocks, this is 1 year)
+‎uint public bountyAllocation = 2500000 * 10**18; //2.5M tokens allocated post-crowdsale for the bounty fund
+‎uint public ecosystemAllocation = 5 * 10**16; //5% of token supply allocated post-crowdsale for the ecosystem fund
+‎uint public founderAllocation = 10 * 10**16; //10% of token supply allocated post-crowdsale for the founder allocation
+‎bool public bountyAllocated = false; //this will change to true when the bounty fund is allocated
+‎bool public ecosystemAllocated = false; //this will change to true when the ecosystem fund is allocated
+‎bool public founderAllocated = false; //this will change to true when the founder fund is allocated
+‎uint public presaleTokenSupply = 0; //this will keep track of the token supply created during the crowdsale
+‎uint public presaleEtherRaised = 0; //this will keep track of the Ether raised during the crowdsale
+‎bool public halted = false; //the founder address can set this to true to halt the crowdsale due to emergency
+‎event Buy(address indexed sender, uint eth, uint fbt);
+‎event Withdraw(address indexed sender, address to, uint eth);
+‎event AllocateFounderTokens(address indexed sender);
+‎event AllocateBountyAndEcosystemTokens(address indexed sender);
+‎
+‎function FirstGeegyToken(address founderInput, address signerInput, uint startBlockInput, uint endBlockInput) {
+‎    founder = founderInput;
+‎    signer = signerInput;
+‎    startBlock = startBlockInput;
+‎    endBlock = endBlockInput;
+‎}
+‎
+‎/**
+‎ * Security review
+‎ *
+‎ * - Integer overflow: does not apply, blocknumber can't grow that high
+‎ * - Division is the last operation and constant, should not cause issues
+‎ * - Price function plotted https://github.com/Firstbloodio/token/issues/2
+‎ */
+‎function price() constant returns(uint) {
+‎    if (block.number>=startBlock && block.number<startBlock+250) return 170; //power hour
+‎    if (block.number<startBlock || block.number>endBlock) return 100; //default price
+‎    return 100 + 4*(endBlock - block.number)/(endBlock - startBlock + 1)*67/4; //crowdsale price
+‎}
+‎
+‎// price() exposed for unit tests
+‎function testPrice(uint blockNumber) constant returns(uint) {
+‎    if (blockNumber>=startBlock && blockNumber<startBlock+250) return 170; //power hour
+‎    if (blockNumber<startBlock || blockNumber>endBlock) return 100; //default price
+‎    return 100 + 4*(endBlock - blockNumber)/(endBlock - startBlock + 1)*67/4; //crowdsale price
+‎}
+‎
+‎// Buy entry point
+‎function buy(uint8 v, bytes32 r, bytes32 s) {
+‎    buyRecipient(msg.sender, v, r, s);
+‎}
+‎
+‎/**
+‎ * Main token buy function.
+‎ *
+‎ * Buy for the sender itself or buy on the behalf of somebody else (third party address).
+‎ *
+‎ * Security review
+‎ *
+‎ * - Integer math: ok - using SafeMath
+‎ *
+‎ * - halt flag added - ok
+‎ *
+‎ * Applicable tests:
+‎ *
+‎ * - Test halting, buying, and failing
+‎ * - Test buying on behalf of a recipient
+‎ * - Test buy
+‎ * - Test unhalting, buying, and succeeding
+‎ * - Test buying after the sale ends
+‎ *
+‎ */
+‎function buyRecipient(address recipient, uint8 v, bytes32 r, bytes32 s) {
+‎    bytes32 hash = sha256(msg.sender);
+‎    if (ecrecover(hash,v,r,s) != signer) throw;
+‎    if (block.number<startBlock || block.number>endBlock || safeAdd(presaleEtherRaised,msg.value)>etherCap || halted) throw;
+‎    uint tokens = safeMul(msg.value, price());
+‎    balances[recipient] = safeAdd(balances[recipient], tokens);
+‎    totalSupply = safeAdd(totalSupply, tokens);
+‎    presaleEtherRaised = safeAdd(presaleEtherRaised, msg.value);
+‎
+‎    // TODO: Is there a pitfall of forwarding message value like this
+‎    // TODO: Different address for founder deposits and founder operations (halt, unhalt)
+‎    // as founder opeations might be easier to perform from normal geth account
+‎    if (!founder.call.value(msg.value)()) throw; //immediately send Ether to founder address
+‎
+‎    Buy(recipient, msg.value, tokens);
+‎}
+‎
+‎/**
+‎ * Set up founder address token balance.
+‎ *
+‎ * allocateBountyAndEcosystemTokens() must be calld first.
+‎ *
+‎ * Security review
+‎ *
+‎ * - Integer math: ok - only called once with fixed parameters
+‎ *
+‎ * Applicable tests:
+‎ *
+‎ * - Test bounty and ecosystem allocation
+‎ * - Test bounty and ecosystem allocation twice
+‎ *
+‎ */
+‎function allocateFounderTokens() {
+‎    if (msg.sender!=founder) throw;
+‎    if (
+
 https://github.com/reliantsupportteam-design/freeCodeCamp/commit/fc8741bebc222e66ab2ed227205b587ef8eb0aa8
